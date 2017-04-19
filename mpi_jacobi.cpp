@@ -22,16 +22,78 @@
  */
 
 
-void distribute_vector(const int n, double* input_vector, double** local_vector, MPI_Comm comm)
-{
-    // TODO
+void distribute_vector(const int n, double* input_vector, double** local_vector, MPI_Comm comm){
+    int p, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    MPI_Comm_rank(comm, &rank);
+    int q = sqrt(p);
+    int extra = n%q;
+    int vecSize = 0;
+    int index = 0;
+
+    if(rank == 0){
+        for(int i = 0; i < ceil(n/q); i++){
+            local_vector[i] = &input_vector[i];
+        }
+        index = ceil(n/q) + 1;
+        for(int i = 1; i < q; i++){
+            if(i*q < extra){
+                vecSize = ceil(n/q);
+            } else{
+                vecSize = floor(n/q);
+            }
+            int* newVector = (int *) malloc(vecSize * sizeof(int));
+            for(int j = index; j < index + vecSize; j++){
+                newVector[j-index] = input_vector[j];
+            }
+            index += vecSize;
+            MPI_Send(&newVector, vecSize, MPI_INT, i*q, 111, comm );
+        }
+    } else if(rank%q == 0){
+        MPI_Status stat;
+        MPI_Recv(&local_vector, vecSize, MPI_INT, 0, MPI_ANY_TAG, comm, &stat);
+    }
 }
 
 
 // gather the local vector distributed among (i,0) to the processor (0,0)
-void gather_vector(const int n, double* local_vector, double* output_vector, MPI_Comm comm)
-{
-    // TODO
+void gather_vector(const int n, double* local_vector, double* output_vector, MPI_Comm comm){
+    int p, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    MPI_Comm_rank(comm, &rank);
+    int vecSize;
+    int q = sqrt(p);
+    int extra = n%q;
+    int index = 0;
+
+    if(rank == 0){
+        for(int i = 0; i < ceil(n/q); i++){
+            output_vector[i] = local_vector[i];
+        }
+        index += ceil(n/q) + 1;
+        for(int i = 1; i < q; i++){
+            if(i*q < extra){
+                vecSize = ceil(n/q);
+            } else{
+                vecSize = floor(n/q);
+            }
+            int* newVector = (int *) malloc(vecSize * sizeof(int));
+            MPI_Status stat;
+            MPI_Recv(&newVector, vecSize, MPI_INT, i*q, i*q, comm, &stat);
+            for(int j = index; j < index + vecSize; j++){
+                output_vector[j] = newVector[j-index];
+            }
+            index += vecSize;
+        }
+
+    } else if(rank%q == 0){
+        if(rank < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
+        MPI_Send(&local_vector, vecSize, MPI_INT, 0, rank, comm );
+    }
 }
 
 void distribute_matrix(const int n, double* input_matrix, double** local_matrix, MPI_Comm comm)
@@ -43,6 +105,7 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
 void transpose_bcast_vector(const int n, double* col_vector, double* row_vector, MPI_Comm comm)
 {
     // TODO
+    //Do this
 }
 
 
