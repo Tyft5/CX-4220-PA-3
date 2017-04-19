@@ -37,7 +37,7 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
         }
         index = ceil(n/q) + 1;
         for(int i = 1; i < q; i++){
-            if(i*q < extra){
+            if(i < extra){
                 vecSize = ceil(n/q);
             } else{
                 vecSize = floor(n/q);
@@ -72,7 +72,7 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
         }
         index += ceil(n/q) + 1;
         for(int i = 1; i < q; i++){
-            if(i*q < extra){
+            if(i < extra){
                 vecSize = ceil(n/q);
             } else{
                 vecSize = floor(n/q);
@@ -106,6 +106,41 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
 {
     // TODO
     //Do this
+    int p, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    MPI_Comm_rank(comm, &rank);
+    int vecSize;
+    int q = sqrt(p);
+    int extra = n%q;
+
+    if(rank%q == 0 && rank > 0){
+        if(rank < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
+        MPI_Send(&col_vector, vecSize, MPI_INT, rank + rank/q, 111, comm);
+    } else if(rank%(q+1) == 0 && rank > 0){
+        if((rank - rank/q)/q < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
+        MPI_Status stat;
+        MPI_Recv(&row_vector, vecSize, MPI_INT, rank - rank/q, MPI_ANY_TAG, comm, &stat);
+    }
+
+    //need to add vecSize
+    if(rank%(q+1) == 0){
+        for(int i = 0; i < q; i++){
+            if(rank != i*(rank%q)){
+                MPI_Send(&row_vector, vecSize, MPI_INT, i*(rank%q), 111, comm);
+            }
+        }
+    } else{
+        MPI_Status stat;
+        MPI_Recv(&row_vector, vecSize, MPI_INT, (rank%q)*(q+1), MPI_ANY_TAG, comm, &stat);
+    }
 }
 
 
