@@ -102,14 +102,11 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
 }
 
 
-void transpose_bcast_vector(const int n, double* col_vector, double* row_vector, MPI_Comm comm)
-{
-    // TODO
-    //Do this
+void transpose_bcast_vector(const int n, double* col_vector, double* row_vector, MPI_Comm comm){
     int p, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     MPI_Comm_rank(comm, &rank);
-    int vecSize;
+    int vecSize = 0;
     int q = sqrt(p);
     int extra = n%q;
 
@@ -134,10 +131,20 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     if(rank%(q+1) == 0){
         for(int i = 0; i < q; i++){
             if(rank != i*(rank%q)){
+                if(i < extra){
+                    vecSize = ceil(n/q);
+                } else{
+                    vecSize = floor(n/q);
+                }
                 MPI_Send(&row_vector, vecSize, MPI_INT, i*(rank%q), 111, comm);
             }
         }
     } else{
+        if(rank/q < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
         MPI_Status stat;
         MPI_Recv(&row_vector, vecSize, MPI_INT, (rank%q)*(q+1), MPI_ANY_TAG, comm, &stat);
     }
