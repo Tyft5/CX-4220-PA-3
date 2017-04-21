@@ -24,14 +24,26 @@
 
 void distribute_vector(const int n, double* input_vector, double** local_vector, MPI_Comm comm){
     int p, rank;
-    MPI_Comm_size(MPI_COMM_WORLD, &p);
-    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &p);
+    MPI_Comm newcomm;
+    const int period = 1;
     int q = sqrt(p);
+    MPI_Cart_create(comm, 2, &q, &period, 1, &newcomm);
+    int coordinates[2];
+    MPI_Comm_rank(newcomm, &rank);
+    MPI_Cart_coords(newcomm, rank, 2, coordinates); 
+
+    
     int extra = n%q;
     int vecSize = 0;
     int index = 0;
+    int destination_coords[2] = {0, 0};
+    int destination_rank;
 
-    if(rank == 0){
+    int rank0;
+    MPI_Cart_rank(newcomm, destination_coords, &rank0);
+
+    if(rank == rank0){
         for(int i = 0; i < ceil(n/q); i++){
             local_vector[i] = &input_vector[i];
         }
@@ -47,11 +59,13 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
                 newVector[j-index] = input_vector[j];
             }
             index += vecSize;
-            MPI_Send(&newVector, vecSize, MPI_INT, i*q, 111, comm );
+            destination_coords[0] = i;
+            MPI_Cart_rank(newcomm, destination_coords, &destination_rank);
+            MPI_Send(&newVector, vecSize, MPI_INT, destination_rank, 111, newcomm );
         }
-    } else if(rank%q == 0){
+    } else if(coordinates[1] == 0){
         MPI_Status stat;
-        MPI_Recv(&local_vector, vecSize, MPI_INT, 0, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(&local_vector, vecSize, MPI_INT, rank0, MPI_ANY_TAG, newcomm, &stat);
     }
 }
 
@@ -60,13 +74,24 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
 void gather_vector(const int n, double* local_vector, double* output_vector, MPI_Comm comm){
     int p, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
-    MPI_Comm_rank(comm, &rank);
     int vecSize;
     int q = sqrt(p);
     int extra = n%q;
     int index = 0;
 
-    if(rank == 0){
+    MPI_Comm newcomm;
+    const int period = 1;
+    MPI_Cart_create(comm, 2, &q, &period, 1, &newcomm);
+    int coordinates[2];
+    MPI_Comm_rank(newcomm, &rank);
+    MPI_Cart_coords(newcomm, rank, 2, coordinates);
+
+    int rec_coords[2] = {0, 0};
+    int rank0;
+    MPI_Cart_rank(newcomm, rec_coords, &rank0);
+    int destination_rank;
+
+    if(rank == rank0){
         for(int i = 0; i < ceil(n/q); i++){
             output_vector[i] = local_vector[i];
         }
@@ -79,20 +104,22 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
             }
             int* newVector = (int *) malloc(vecSize * sizeof(int));
             MPI_Status stat;
-            MPI_Recv(&newVector, vecSize, MPI_INT, i*q, i*q, comm, &stat);
+            rec_coords[0] = i;
+            MPI_Cart_rank(newcomm, rec_coords, &destination_rank);
+            MPI_Recv(&newVector, vecSize, MPI_INT, rank0, 111, newcomm, &stat);
             for(int j = index; j < index + vecSize; j++){
                 output_vector[j] = newVector[j-index];
             }
             index += vecSize;
         }
 
-    } else if(rank%q == 0){
+    } else if(coordinates[1] == 0){
         if(rank < extra){
             vecSize = ceil(n/q);
         } else{
             vecSize = floor(n/q);
         }
-        MPI_Send(&local_vector, vecSize, MPI_INT, 0, rank, comm );
+        MPI_Send(&local_vector, vecSize, MPI_INT, rank0, 111, newcomm );
     }
 }
 
@@ -110,25 +137,42 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     int q = sqrt(p);
     int extra = n%q;
 
-    if(rank%q == 0 && rank > 0){
+    MPI_Comm newcomm;
+    const int period = 1;
+    MPI_Cart_create(comm, 2, &q, &period, 1, &newcomm);
+    int coordinates[2];
+    MPI_Comm_rank(newcomm, &rank);
+    MPI_Cart_coords(newcomm, rank, 2, coordinates);
+
+    int rec_coords[2] = {0, 0};
+    int rank0;
+    MPI_Cart_rank(newcomm, rec_coords, &rank0);
+    int destination_rank;
+    int receive_rank;
+
+    if(coordinates[0] == 0 && rank != rank0){
         if(rank < extra){
             vecSize = ceil(n/q);
         } else{
             vecSize = floor(n/q);
         }
-        MPI_Send(&col_vector, vecSize, MPI_INT, rank + rank/q, 111, comm);
-    } else if(rank%(q+1) == 0 && rank > 0){
+        int dest_coords[2] = {coordinates[0],coordinates[0]};
+        MPI_Cart_rank(newcomm, dest_coords, &destination_rank);
+        MPI_Send(&col_vector, vecSize, MPI_INT, destination_rank, 111, newcomm);
+    } else if(coordinates[0] == coordinates[1] && rank > 0){
         if((rank - rank/q)/q < extra){
             vecSize = ceil(n/q);
         } else{
             vecSize = floor(n/q);
         }
         MPI_Status stat;
-        MPI_Recv(&row_vector, vecSize, MPI_INT, rank - rank/q, MPI_ANY_TAG, comm, &stat);
+        int receive_coords[2] = {0,coordinates[1]};
+        MPI_Cart_rank(newcomm, receive_coords, &receive_rank);
+        MPI_Recv(&row_vector, vecSize, MPI_INT, receive_rank, MPI_ANY_TAG, newcomm, &stat);
     }
 
-    //need to add vecSize
-    if(rank%(q+1) == 0){
+    if(coordinates[0] == coordinates[1]){
+        rec_coords[1] = coordinates[1];
         for(int i = 0; i < q; i++){
             if(rank != i*(rank%q)){
                 if(i < extra){
@@ -136,7 +180,9 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
                 } else{
                     vecSize = floor(n/q);
                 }
-                MPI_Send(&row_vector, vecSize, MPI_INT, i*(rank%q), 111, comm);
+                rec_coords[0] = i;
+                MPI_Cart_rank(newcomm, rec_coords, &destination_rank);
+                MPI_Send(&row_vector, vecSize, MPI_INT, destination_rank, 111, newcomm);
             }
         }
     } else{
@@ -146,7 +192,10 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
             vecSize = floor(n/q);
         }
         MPI_Status stat;
-        MPI_Recv(&row_vector, vecSize, MPI_INT, (rank%q)*(q+1), MPI_ANY_TAG, comm, &stat);
+        rec_coords[1] = coordinates[1];
+        rec_coords[0] = coordinates[0];
+        MPI_Cart_rank(newcomm, rec_coords, &receive_rank);
+        MPI_Recv(&row_vector, vecSize, MPI_INT, receive_rank, MPI_ANY_TAG, newcomm, &stat);
     }
 }
 
