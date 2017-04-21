@@ -64,6 +64,11 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
             MPI_Send(&newVector, vecSize, MPI_INT, destination_rank, 111, newcomm );
         }
     } else if(coordinates[1] == 0){
+        if(coordinates[0] < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
         MPI_Status stat;
         MPI_Recv(&local_vector, vecSize, MPI_INT, rank0, MPI_ANY_TAG, newcomm, &stat);
     }
