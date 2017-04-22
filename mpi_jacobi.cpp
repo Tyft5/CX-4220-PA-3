@@ -76,7 +76,7 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
 }
 
 
-// gather the local vector distributed among (i,0) to the processor (0,0)
+// gather the local vector distributed among (0,i) to the processor (0,0)
 void gather_vector(const int n, double* local_vector, double* output_vector, MPI_Comm comm){
     int p, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
@@ -161,6 +161,7 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
     }
 
     double *loc_mat = (double *) malloc(rowsize * colsize * sizeof(double));
+    double *send_mat = NULL;
 
     int row_offset = rowsize, col_offset = colsize;
     if (coords[0] == 0 && coords[1] == 0) {
@@ -183,7 +184,7 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
                 else { send_c = fl; } 
 
                 // Allocate send matrix
-                double *send_mat = (double *) malloc(send_r * send_c * sizeof(double));
+                send_mat = (double *) malloc(send_r * send_c * sizeof(double));
                 for (i = 0; i < send_c; i++) {
                     for (int j = 0; j < send_r; j++) {
                         send_mat[i * send_r + j] = input_matrix[row_offset * n + col_offset + i * n + j];
@@ -340,22 +341,6 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
 void distributed_jacobi(const int n, double* local_A, double* local_b, double* local_x,
                 MPI_Comm comm, int max_iter, double l2_termination)
 {
-    /*
-     *      D = diag(A)     // block distribute to first column (i,0)
-     *      R = A - D       // copy A and set diagonal to zero
-     *      x = [0,...,0]   // init x to zero, block distributed on first column
-     *
-     *      for (iter in 1:max_iter):
-     *          w = R*x         // using distributed_matrix_vector_mult()
-     *          x = (b - P)/D   // purely local on first column, no communication necessary!
-     *          w = A*x         // using distributed_matrix_vector_mult()
-     *          l2 = ||b - w||  // calculate L2-norm in a distributed fashion
-     *          if l2 <= l2_termination:
-     *              return      // exit if termination criteria is met, make sure
-     *                          // all processor know that they should exit
-     *                          // (-> MPI_Allreduce)
-     */
-
     int p, rank, rowsize = 0, colsize = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     int coords[2];
@@ -363,6 +348,16 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     MPI_Cart_coords(comm, rank, 2, coords);
     int q = sqrt(p);
     int extra = n % q;
+
+    int zero_coords[2] = {0, 0};
+    int rank0;
+    MPI_Cart_rank(comm, zero_coords, &rank0);
+
+    double *x = NULL;
+    double *w = NULL;
+    double *squared = NULL;
+    double *all_squared = NULL;
+    double *diag = NULL;
 
     // Find the local matrix dimensions
     if (coords[0] < extra) {
@@ -376,7 +371,7 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         colsize = floor(n / q);
     }
 
-    // Copy A into R with the diagonal set to 0
+    // Copy A into R
     double *local_R = (double *) malloc(rowsize * colsize * sizeof(double));
     for (int i = 0; i < colsize; i++) {
         for (int j = 0; j < rowsize; j++) {
@@ -386,9 +381,9 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
 
     // Find the diagonal and send it to the first column
     if (coords[0] == coords[1]) {
-        double *daig = (double *) malloc(rowsize * sizeof(double));
+        diag = (double *) malloc(rowsize * sizeof(double));
         for (int i = 0; i < rowsize; i++) {
-            diag[i] = local_A[i * rowsize + i]
+            diag[i] = local_A[i * rowsize + i];
         }
 
         int send_coords[2] = {coords[1], 0};
@@ -397,29 +392,82 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         if (coords[0] != 0) {
             MPI_Send(&diag, rowsize, MPI_DOUBLE, send_rank, 333, comm);
             free(diag);
+        } else {
+            // Make vectors on 0,0
+            x = (double *) malloc(colsize * sizeof(double));
+            w = (double *) malloc(colsize * sizeof(double));
+            squared = (double *) malloc(colsize * sizeof(double));
+            all_squared = (double *) malloc(n * sizeof(double));
         }
+
+        // set diagonal of R to zero
         for (int i = 0; i < rowsize; i++) {
             local_R[i * rowsize + i] = 0;
         }
 
     } else if (coords[0] == 0) {
-        int rec_size = 0;
-        if (coords[1] < extra) { rec_size = ceil(n / q);}
-        else { rec_size = floor(n / q);}
+        int rec_size = colsize;
 
         int rec_coords[2] = {coords[1], coords[1]};
         int rec_rank;
         MPI_Cart_rank(comm, rec_coords, &rec_rank);
 
-        double *diag = (double *) malloc(rec_size * sizeof(double));
+        diag = (double *) malloc(rec_size * sizeof(double));
         MPI_Status stat;
         MPI_Recv(&diag, rec_size, MPI_DOUBLE, rec_rank, MPI_ANY_TAG, comm, &stat);
+
+        // Make vectors
+        x = (double *) malloc(colsize * sizeof(double));
+        w = (double *) malloc(colsize * sizeof(double));
+        squared = (double *) malloc(colsize * sizeof(double));
     }
 
-    // Do operations on the first column
-    if (coords[0] == 0) {
+    int cont = 1;
+    for (int iter = 0; iter < max_iter; iter++) {
+        distributed_matrix_vector_mult(n, local_R, x, w, comm);
 
+        if (coords[0] == 0) {
+            for (int i = 0; i < colsize; i++) {
+                x[i] = (local_b[i] - w[i]) / diag[i];
+            }
+        }
+
+        distributed_matrix_vector_mult(n, local_A, x, w, comm);
+
+        if (coords[0] == 0) {
+            // Find local l2 norm
+            for (int i = 0; i < colsize; i++) {
+                squared[i] = pow(w[i] - local_b[i], 2);
+            }
+
+            gather_vector(n, squared, all_squared, comm);
+
+            if (coords[1] == 0) {
+                int l2, sum = 0;
+                for (int i = 0; i < n; i++) {
+                    sum += all_squared[i];
+                }
+                l2 = sqrt(sum);
+                if (l2 <= l2_termination) {
+                    cont = 0;
+                }
+            }
+        }
+
+        MPI_Bcast(&cont, 1, MPI_INT, rank0, comm);
+        if (!cont) break;
     }
+
+    for (int i = 0; i < colsize; i++) {
+        local_x[i] = x[i];
+    }
+
+    free(local_R);
+    free(w);
+    free(diag);
+    free(x);
+    free(squared);
+    free(all_squared);
 }
 
 
