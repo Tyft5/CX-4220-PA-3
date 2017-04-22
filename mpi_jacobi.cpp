@@ -293,6 +293,14 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     int extra = n%q;
     int vecSize;
     int index = 0;
+
+    if(coordinates[1] < extra){
+        vecSize = ceil(n/q);
+    } else{
+        vecSize = floor(n/q);
+    }
+    double* new_x = (double*) malloc(vecSize * sizeof(double));
+    transpose_bcast_vector(n, local_x, new_x, comm);
     
     //sum local values
     for(int i = 0; i < q; i++){
@@ -302,7 +310,7 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
             vecSize = floor(n/q);
         }
         for(int j = 0; j < vecSize; j++){
-            local_y[i] += local_A[index + j] * local_x[i];
+            local_y[i] += local_A[index + j] * new_x[i];
         }
         index += vecSize;
     }
