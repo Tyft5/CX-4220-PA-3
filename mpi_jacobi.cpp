@@ -168,7 +168,7 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
 
 void distribute_matrix(const int n, double* input_matrix, double** local_matrix, MPI_Comm comm)
 {
-    int i, p, rank, rowsize, colsize, send_r= 0, send_c, send_rank;
+    int i, p, rank, rowsize, colsize, send_r= 0, send_c = 0, send_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     MPI_Comm_rank(comm, &rank);
     int q = (int) sqrt(p);
