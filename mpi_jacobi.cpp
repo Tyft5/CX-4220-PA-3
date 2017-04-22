@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <math.h>
 #include <vector>
+#include <time.h>
 
 /*
  * TODO: Implement your solutions here
@@ -233,6 +234,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     int destination_rank;
     int receive_rank;
 
+    //send/recieve to pivot
     if(coordinates[0] == 0 && rank != rank0){
         if(coordinates[1] < extra){
             vecSize = ceil(n/q);
@@ -275,7 +277,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
             vecSize = floor(n/q);
         }
         MPI_Status stat;
-        rec_coords[1] = coordinates[1];
+        rec_coords[1] = coordinates[0];
         rec_coords[0] = coordinates[0];
         MPI_Cart_rank(comm, rec_coords, &receive_rank);
         MPI_Recv(&row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
@@ -292,29 +294,50 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     MPI_Cart_coords(comm, rank, 2, coordinates);
     int q = sqrt(p);
     int extra = n%q;
-    int vecSize;
+    int vecSize = ceil(n/q);
     int index = 0;
 
-    if(coordinates[1] < extra){
-        vecSize = ceil(n/q);
-    } else{
-        vecSize = floor(n/q);
-    }
+
+    // if(coordinates[1] < extra){
+    //     vecSize = ceil(n/q);
+    // } else{
+    //     vecSize = floor(n/q);
+    // }
+
     double* new_x = (double*) malloc(vecSize * sizeof(double));
     transpose_bcast_vector(n, local_x, new_x, comm);
-    
-    //sum local values
-    for(int i = 0; i < q; i++){
-        if(i < extra){
-            vecSize = ceil(n/q);
-        } else{
-            vecSize = floor(n/q);
-        }
-        for(int j = 0; j < vecSize; j++){
-            local_y[i] += local_A[index + j] * new_x[i];
-        }
-        index += vecSize;
+
+    int rowsize = 0, colsize;
+    int fl = floor(n / q);
+    int cl = ceil(n / q);
+    if (coordinates[0] < extra) {
+        rowsize = cl;
+    } else {
+        rowsize = fl;
     }
+    if (coordinates[1] < extra) {
+        colsize = cl;
+    } else {
+        colsize = fl;
+    }
+    //sum local values
+    for(int i = 0; i < colsize; i++){
+        // if(i < extra){
+        //     vecSize = ceil(n/q);
+        // } else{
+        //     vecSize = floor(n/q);
+        // }
+        for(int j = 0; j < rowsize; j++){
+            local_y[i] += local_A[index + j] * new_x[j];
+        }
+        index += colsize;
+    }
+    unsigned int t = time(0);
+    while(time(0) < t +1);
+    printf("\nhi\n");
+    t = time(0);
+    while(time(0) < t +1);
+    MPI_Barrier(comm);
 
     //reduction
     if(coordinates[1] < extra){
@@ -342,7 +365,6 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
         MPI_Cart_rank(comm, send_coords, &send_rank);
         MPI_Send(&local_y, vecSize, MPI_DOUBLE, send_rank, 111, comm);
     }
-
 }
 
 // Solves Ax = b using the iterative jacobi method
@@ -492,7 +514,6 @@ void mpi_matrix_vector_mult(const int n, double* A,
     // allocate local result space
     double* local_y = new double[block_decompose_by_dim(n, comm, 0)];
     distributed_matrix_vector_mult(n, local_A, local_x, local_y, comm);
-
     // gather results back to rank 0
     gather_vector(n, local_y, y, comm);
 }
