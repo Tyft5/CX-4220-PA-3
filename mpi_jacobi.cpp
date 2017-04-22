@@ -54,14 +54,14 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
             } else{
                 vecSize = floor(n/q);
             }
-            int* newVector = (int *) malloc(vecSize * sizeof(int));
+            double* newVector = (double*) malloc(vecSize * sizeof(double));
             for(int j = index; j < index + vecSize; j++){
                 newVector[j-index] = input_vector[j];
             }
             index += vecSize;
             destination_coords[0] = i;
             MPI_Cart_rank(comm, destination_coords, &destination_rank);
-            MPI_Send(&newVector, vecSize, MPI_INT, destination_rank, 111, comm );
+            MPI_Send(&newVector, vecSize, MPI_DOUBLE, destination_rank, 111, comm );
         }
     } else if(coordinates[1] == 0){
         if(coordinates[0] < extra){
@@ -70,7 +70,7 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
             vecSize = floor(n/q);
         }
         MPI_Status stat;
-        MPI_Recv(&local_vector, vecSize, MPI_INT, rank0, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(local_vector, vecSize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
     }
 }
 
@@ -107,11 +107,11 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
             } else{
                 vecSize = floor(n/q);
             }
-            int* newVector = (int *) malloc(vecSize * sizeof(int));
+            double* newVector = (double *) malloc(vecSize * sizeof(double));
             MPI_Status stat;
             rec_coords[0] = i;
             MPI_Cart_rank(comm, rec_coords, &destination_rank);
-            MPI_Recv(&newVector, vecSize, MPI_INT, rank0, 111, comm, &stat);
+            MPI_Recv(&newVector, vecSize, MPI_DOUBLE, rank0, 111, comm, &stat);
             for(int j = index; j < index + vecSize; j++){
                 output_vector[j] = newVector[j-index];
             }
@@ -124,7 +124,7 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
         } else{
             vecSize = floor(n/q);
         }
-        MPI_Send(&local_vector, vecSize, MPI_INT, rank0, 111, comm );
+        MPI_Send(&local_vector, vecSize, MPI_DOUBLE, rank0, 111, comm );
     }
 }
 
@@ -250,7 +250,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         }
         int dest_coords[2] = {coordinates[0],coordinates[0]};
         MPI_Cart_rank(comm, dest_coords, &destination_rank);
-        MPI_Send(&col_vector, vecSize, MPI_INT, destination_rank, 111, comm);
+        MPI_Send(&col_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
     } else if(coordinates[0] == coordinates[1] && rank > 0){
         if((rank - rank/q)/q < extra){
             vecSize = ceil(n/q);
@@ -260,7 +260,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         MPI_Status stat;
         int receive_coords[2] = {0,coordinates[1]};
         MPI_Cart_rank(comm, receive_coords, &receive_rank);
-        MPI_Recv(&row_vector, vecSize, MPI_INT, receive_rank, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(&row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
     }
 
     if(coordinates[0] == coordinates[1]){
@@ -274,7 +274,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
                 }
                 rec_coords[0] = i;
                 MPI_Cart_rank(comm, rec_coords, &destination_rank);
-                MPI_Send(&row_vector, vecSize, MPI_INT, destination_rank, 111, comm);
+                MPI_Send(&row_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
             }
         }
     } else{
@@ -287,7 +287,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         rec_coords[1] = coordinates[1];
         rec_coords[0] = coordinates[0];
         MPI_Cart_rank(comm, rec_coords, &receive_rank);
-        MPI_Recv(&row_vector, vecSize, MPI_INT, receive_rank, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(&row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
     }
 }
 
