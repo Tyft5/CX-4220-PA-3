@@ -294,7 +294,56 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
 
 void distributed_matrix_vector_mult(const int n, double* local_A, double* local_x, double* local_y, MPI_Comm comm)
 {
-    // TODO
+    int p, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    int coordinates[2];
+    MPI_Comm_rank(comm, &rank);
+    MPI_Cart_coords(comm, rank, 2, coordinates);
+    int q = sqrt(p);
+    int extra = n%q;
+    int vecSize;
+    int index;
+    
+    //sum local values
+    for(int i = 0; i < q; i++){
+        if(coordinates[i] < extra){
+            vecSize = ceil(n/q);
+        } else{
+            vecSize = floor(n/q);
+        }
+        for(int j = 0; j < vecSize; j++){
+            local_y[i] += local_A[index + j] * local_x[i];
+        }
+        index += vecSize;
+    }
+
+    //reduction
+    if(coordinates[0] < extra){
+        vecSize = ceil(n/q);
+    } else{
+        vecSize = floor(n/q);
+    }
+    double* temp_vector;
+    int rec_coords[2] = {0,0};
+    int receive_rank, send_rank;
+    if(coordinates[1] == 0){
+        for(int i = 1; i < q; i++){
+            rec_coords[0] = i;
+            MPI_Cart_rank(comm, rec_coords, &receive_rank);
+            MPI_Status stat;
+            temp_vector = (double*) malloc(vecSize * sizeof(double));
+            MPI_Recv(&temp_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
+            for(int j = 0; j < vecSize; j++){
+                local_y[j] += temp_vector[j];
+            }
+            free(temp_vector);
+        }
+    } else{
+        int send_coords[2] = {coordinates[0], 0};
+        MPI_Cart_rank(comm, send_coords, &send_rank);
+        MPI_Send(&local_y, vecSize, MPI_DOUBLE, send_rank, 111, comm);
+    }
+
 }
 
 // Solves Ax = b using the iterative jacobi method
