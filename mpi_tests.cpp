@@ -213,7 +213,7 @@ TEST(MpiTest, Jacobi1)
                      -1., 11., -1., 3.,
                      2., -1., 10., -1.,
                      0.0, 3., -1., 8.};
-                     
+
     double b[4] =  {6., 25., -11., 15.};
     double x[4];
     double expected_x[4] = {1.0,  2.0, -1.0, 1.0};
@@ -224,7 +224,8 @@ TEST(MpiTest, Jacobi1)
     get_grid_comm(&grid_comm);
 
     // testing sequential matrix multiplication
-    mpi_jacobi(n, A, b, x, grid_comm);
+    int max_iter = 300;
+    mpi_jacobi(n, A, b, x, grid_comm, max_iter);
 
     // checking if all values are correct (up to some error value)
     for (int i = 0; i < n; ++i)

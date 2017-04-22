@@ -489,13 +489,17 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     int rank0;
     MPI_Cart_rank(comm, zero_coords, &rank0);
 
-    double *x = NULL;
-    double *w = NULL;
-    double *squared = NULL;
-    double *all_squared = NULL;
+    // double *x = NULL;
+    double *x = (double *) calloc(colsize, sizeof(double));
+    // double *w = NULL;
+    double *w = (double *) malloc(colsize * sizeof(double));
+    // double *squared = NULL;
+    double *squared = (double *) malloc(colsize * sizeof(double));
+    // double *all_squared = NULL;
+    double *all_squared = (double *) malloc(n * sizeof(double));
     double *diag = NULL;
 
-    unsigned int t;
+    // unsigned int t;
     // t = time(0);
     // while(time(0) < t + rank);
     // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
@@ -555,10 +559,11 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             free(diag);
         } else {
             // Make vectors on 0,0
-            x = (double *) calloc(colsize, sizeof(double));
-            w = (double *) malloc(colsize * sizeof(double));
-            squared = (double *) malloc(colsize * sizeof(double));
-            all_squared = (double *) malloc(n * sizeof(double));
+            // x = (double *) calloc(colsize, sizeof(double));
+            // w = (double *) malloc(colsize * sizeof(double));
+            // w = new double[block_decompose_by_dim(n, comm, 0)];
+            // squared = (double *) malloc(colsize * sizeof(double));
+            // all_squared = (double *) malloc(n * sizeof(double));
 
             // for (int i = 0; i < colsize; i++) {
             //     x[i] = 0;
@@ -586,9 +591,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         MPI_Recv(diag, rec_size, MPI_DOUBLE, rec_rank, MPI_ANY_TAG, comm, &stat);
 
         // Make vectors
-        x = (double *) calloc(colsize, sizeof(double));
-        w = (double *) malloc(colsize * sizeof(double));
-        squared = (double *) malloc(colsize * sizeof(double));
+        // x = (double *) calloc(colsize, sizeof(double));
+        // w = (double *) malloc(colsize * sizeof(double));
+        // w = new double[block_decompose_by_dim(n, comm, 0)];
+        // squared = (double *) malloc(colsize * sizeof(double));
     }
 
     // t = time(0);
@@ -611,10 +617,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
 
         distributed_matrix_vector_mult(n, local_R, x, w, comm);
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("20\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("20\n");
+        // MPI_Barrier(comm);
 
         if (coords[0] == 0) {
             for (int i = 0; i < colsize; i++) {
@@ -622,10 +628,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("21\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("21\n");
+        // MPI_Barrier(comm);
 
         distributed_matrix_vector_mult(n, local_A, x, w, comm);
 
@@ -638,7 +644,7 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             gather_vector(n, squared, all_squared, comm);
 
             if (coords[1] == 0) {
-                int l2, sum = 0;
+                double l2, sum = 0.;
                 for (int i = 0; i < n; i++) {
                     sum += all_squared[i];
                 }
@@ -649,19 +655,19 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("22\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("22\n");
+        // MPI_Barrier(comm);
 
         MPI_Bcast(&cont, 1, MPI_INT, rank0, comm);
         if (!cont) break;
     }
 
-    t = time(0);
-    while(time(0) < t + rank);
-    printf("4\n");
-    MPI_Barrier(comm);
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("4\n");
+    // MPI_Barrier(comm);
 
     for (int i = 0; i < colsize; i++) {
         local_x[i] = x[i];
