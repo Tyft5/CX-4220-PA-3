@@ -248,7 +248,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     int destination_rank;
     int receive_rank;
 
-    if(coordinates[1] == 0 && rank != rank0){
+    if(coordinates[0] == 0 && rank != rank0){
         if(coordinates[1] < extra){
             vecSize = ceil(n/q);
         } else{
