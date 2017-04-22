@@ -130,7 +130,94 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
 
 void distribute_matrix(const int n, double* input_matrix, double** local_matrix, MPI_Comm comm)
 {
-    // TODO
+    int i, p, rank, rowsize, colsize, send_r, send_c, send_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    MPI_Comm_rank(comm, &rank);
+    int q = (int) sqrt(p);
+    int extra = n % q;
+
+    int coords[2];
+    MPI_Cart_coords(comm, rank, 2, coords);
+
+    int rank0;
+    MPI_Cart_rank(comm, {0, 0}, &rank0);
+
+    // Find size of local matrix
+    int fl = floor(n / q);
+    int cl = ceil(n / q);
+    if (coords[0] < extra) {
+        rowsize = cl;
+    } else {
+        rowsize = fl;
+    }
+    if (coords[1] < extra) {
+        colsize = cl;
+    } else {
+        colsize = fl;
+    }
+
+    double *tmp_mat[rowsize];
+    for (i = 0; i < rowsize; i++) {
+        tmp_mat[i] = (double *) malloc(colsize * sizeof(double));
+    }
+
+    // double **tmp_mat = (double **) malloc(rowsize * sizeof(double *));
+    // tmp_mat[0] = (double *) malloc(rowsize * colsize * sizeof(double));
+    // for (int i = 0; i < rowsize; i++) {
+    //     tmp_mat[i] = (*tmp_mat + colsize * i);
+    // }
+
+    int row_offset = rowsize, col_offset = colsize;
+    if (coords[0] == 0 && coords[1] == 0) {
+
+        // Copy local matrix for 0,0
+        for (i = 0; i < rowsize; i++) {
+            for (int j = 0; j < colsize; j++) {
+                tmp_mat[i][j] = input_matrix[i][j]
+            }
+        }
+
+        // Send matrices to the rest of the processors
+        for (int v = 0; v < q; v++) {
+            for (int w = 0; w < q; w++) {
+                if (v == 0 && w == 0) continue;
+                MPI_Cart_rank(comm, {v, w}, &send_rank);
+
+                // Find size of send matrix
+                if (v < extra) { send_r = cl; }
+                else { send_r = fl; }
+                if (w < extra) { send_c = cl; }
+                else { send_c = fl; } 
+
+                // Allocate send matrix
+                double *send_mat[send_r];
+                for (i = 0; i < send_r; i++) {
+                    send_mat[i] = (double *) malloc(send_c * sizeof(double));
+                    for (int j = 0; j < send_c; j++) {
+                        send_mat[i][j] = input_matrix[][];
+                    }
+                }
+
+                for (i = 0; i < rowsize; i++) {
+                    MPI_Send(&send_mat[i][0], send_c, MPI_DOUBLE, send_rank, 222, comm);
+                }
+
+                // Add to index offsets for input_matrix
+                col_offset += send_c
+            }
+            row_offset += send_r;
+            col_offset = 0;
+        }
+    } else {
+        // Receive from 0,0
+        MPI_Status stat;
+        for (i = 0; i < rowsize; i++) {
+            MPI_Recv(&tmp_mat[i][0], colsize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
+        }
+    }
+
+    // Make output pointer point to local matrix
+    *local_matrix = tmp_mat;
 }
 
 
