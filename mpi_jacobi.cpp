@@ -162,25 +162,9 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
 
     double *loc_mat = (double *) malloc(rowsize * colsize * sizeof(double));
 
-    // double *tmp_mat[rowsize];
-    // for (i = 0; i < rowsize; i++) {
-    //     tmp_mat[i] = (double *) malloc(colsize * sizeof(double));
-    // }
-    // double **tmp_mat = (double **) malloc(rowsize * sizeof(double *));
-    // tmp_mat[0] = (double *) malloc(rowsize * colsize * sizeof(double));
-    // for (int i = 0; i < rowsize; i++) {
-    //     tmp_mat[i] = (*tmp_mat + colsize * i);
-    // }
-
     int row_offset = rowsize, col_offset = colsize;
     if (coords[0] == 0 && coords[1] == 0) {
 
-        // Copy local matrix for 0,0
-        // for (i = 0; i < rowsize; i++) {
-        //     for (int j = 0; j < colsize; j++) {
-        //         tmp_mat[i][j] = input_matrix[i][j]
-        //     }
-        // }
         for (i = 0; i < rowsize * colsize; i++) {
             loc_mat[i] = input_matrix[i];
         }
@@ -200,9 +184,9 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
 
                 // Allocate send matrix
                 double *send_mat = (double *) malloc(send_r * send_c * sizeof(double));
-                for (i = 0; i < send_r; i++) {
-                    for (int j = 0; j < send_c; j++) {
-                        send_mat[i * send_c + j] = input_matrix[row_offset * n + col_offset + i * n + j];
+                for (i = 0; i < send_c; i++) {
+                    for (int j = 0; j < send_r; j++) {
+                        send_mat[i * send_r + j] = input_matrix[row_offset * n + col_offset + i * n + j];
                     }
                 }
 
@@ -215,7 +199,7 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
             col_offset = 0;
         }
 
-        // free send_mat
+        free(send_mat);
     } else {
         // Receive from 0,0
         MPI_Status stat;
@@ -372,7 +356,70 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
      *                          // (-> MPI_Allreduce)
      */
 
+    int p, rank, rowsize = 0, colsize = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    int coords[2];
+    MPI_Comm_rank(comm, &rank);
+    MPI_Cart_coords(comm, rank, 2, coords);
+    int q = sqrt(p);
+    int extra = n % q;
 
+    // Find the local matrix dimensions
+    if (coords[0] < extra) {
+        rowsize = ceil(n / q);
+    } else {
+        rowsize = floor(n / q);
+    }
+    if (coords[1] < extra) {
+        colsize = ceil(n / q);
+    } else {
+        colsize = floor(n / q);
+    }
+
+    // Copy A into R with the diagonal set to 0
+    double *local_R = (double *) malloc(rowsize * colsize * sizeof(double));
+    for (int i = 0; i < colsize; i++) {
+        for (int j = 0; j < rowsize; j++) {
+            local_R[i * rowsize + j] = local_A[i * rowsize + j];
+        }
+    }
+
+    // Find the diagonal and send it to the first column
+    if (coords[0] == coords[1]) {
+        double *daig = (double *) malloc(rowsize * sizeof(double));
+        for (int i = 0; i < rowsize; i++) {
+            diag[i] = local_A[i * rowsize + i]
+        }
+
+        int send_coords[2] = {coords[1], 0};
+        int send_rank;
+        MPI_Cart_rank(comm, send_coords, &send_rank);
+        if (coords[0] != 0) {
+            MPI_Send(&diag, rowsize, MPI_DOUBLE, send_rank, 333, comm);
+            free(diag);
+        }
+        for (int i = 0; i < rowsize; i++) {
+            local_R[i * rowsize + i] = 0;
+        }
+
+    } else if (coords[0] == 0) {
+        int rec_size = 0;
+        if (coords[1] < extra) { rec_size = ceil(n / q);}
+        else { rec_size = floor(n / q);}
+
+        int rec_coords[2] = {coords[1], coords[1]};
+        int rec_rank;
+        MPI_Cart_rank(comm, rec_coords, &rec_rank);
+
+        double *diag = (double *) malloc(rec_size * sizeof(double));
+        MPI_Status stat;
+        MPI_Recv(&diag, rec_size, MPI_DOUBLE, rec_rank, MPI_ANY_TAG, comm, &stat);
+    }
+
+    // Do operations on the first column
+    if (coords[0] == 0) {
+
+    }
 }
 
 
