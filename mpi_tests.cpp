@@ -44,6 +44,139 @@ void get_grid_comm(MPI_Comm* grid_comm)
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, grid_comm);
 }
 
+// Test vector distribute and gather
+TEST(MpiTest, VectorDistributeGather1) {
+
+    double x[4] = {5., 6., 7., 8.};
+    double *local_x = NULL;
+    double new_x[4];
+    int n = 4;
+
+    // get grid communicator
+    MPI_Comm grid_comm;
+    get_grid_comm(&grid_comm);
+
+    // printf("1\n");
+    // unsigned int t = time(0);
+    // while(time(0) < t + 1);
+
+    distribute_vector(n, x, &local_x, grid_comm);
+
+    MPI_Barrier(grid_comm);
+    int rank;
+    MPI_Comm_rank(grid_comm, &rank);
+    int coords[2];
+    MPI_Cart_coords(grid_comm, rank, 2, coords);
+    // printf("2\n");
+    // t = time(0);
+    // while(time(0) < t + rank);
+
+    // if (coords[0] == 0) {
+    //     printf("Rank %d: ", rank);
+    //     for (int i = 0; i < 2; i++) {
+    //         printf("%f ", local_x[i]);
+    //     }
+    //     printf("\n");
+    // }
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // MPI_Barrier(grid_comm);
+
+    // printf("2\n");
+    // t = time(0);
+    // while(time(0) < t + rank);
+
+    gather_vector(n, local_x, new_x, grid_comm);
+
+    // printf("%d 3\n", rank);
+    // t = time(0);
+    // while(time(0) < t + rank);
+
+    // if (rank == 0) {
+    //     for (int i = 0; i < 4; i++) {
+    //         printf("%f ", new_x[i]);
+    //     }
+    //     printf("\n");
+    // }
+
+    for (int i = 0; i < n; i++) {
+        EXPECT_NEAR(x[i], new_x[i], 1e-5) << " Value x[" << i << "] is wrong";
+    }
+}
+
+// Test matrix distribute
+TEST(MpiTest, MatrixDistribute1) {
+    double A[4*4] = {10., -1., 2., 0.,
+                     -1., 11., -1., 3.,
+                     2., -1., 10., -1.,
+                     0.0, 3., -1., 8.};
+    int n = 4;
+    double expected[4] = {10., -1., -1., 11.};
+
+    double *loc_mat = NULL;
+
+    // get grid communicator
+    MPI_Comm grid_comm;
+    get_grid_comm(&grid_comm);
+
+    distribute_matrix(n, A, &loc_mat, grid_comm);
+
+    int rank;
+    MPI_Comm_rank(grid_comm, &rank);
+    int coords[2];
+    MPI_Cart_coords(grid_comm, rank, 2, coords);
+
+    // unsigned int t = time(0);
+    // while(time(0) < t + rank);
+    // printf("Rank: %d %d:", coords[0], coords[1]);
+    // for (int i = 0; i < 4; i++) {
+    //     printf("%f ", loc_mat[i]);
+    // }
+    // printf("\n");
+    MPI_Barrier(grid_comm);
+
+    for (int i = 0; i < 2; i++) {
+        EXPECT_NEAR(loc_mat[i], expected[i], 1e-8) << " element A[" << i << "] is wrong";
+    }    
+}
+
+// Test transpose bcast vector
+TEST(MpiTest, TransposeBcastVector1) {
+    // get grid communicator
+    MPI_Comm grid_comm;
+    get_grid_comm(&grid_comm);
+
+    int rank;
+    MPI_Comm_rank(grid_comm, &rank);
+    int coords[2];
+    MPI_Cart_coords(grid_comm, rank, 2, coords);
+
+    double x[4] =  {6., 25., -11., 15.};
+    double *loc_x = NULL;
+    double *distributed = (double *) malloc(2 * sizeof(double));
+    int n = 4;
+
+    distribute_vector(n, x, &loc_x, grid_comm);
+
+    // MPI_Barrier(grid_comm);
+
+    transpose_bcast_vector(n, loc_x, distributed, grid_comm);
+
+    // unsigned int t = time(0);
+    // while(time(0) < t + rank);
+    // printf("Rank: %d %d:", coords[0], coords[1]);
+    // for (int i = 0; i < 2; i++) {
+    //     printf("%f ", distributed[i]);
+    // }
+    // printf("\n");
+
+    // MPI_Barrier(grid_comm);
+
+    for (int i = 0; i < 2; i++) {
+        EXPECT_NEAR(distributed[i], x[i], 1e-8);
+    }
+}
+
 // test parallel MPI matrix vector multiplication
 TEST(MpiTest, MatrixVectorMult1)
 {
@@ -77,9 +210,10 @@ TEST(MpiTest, Jacobi1)
 {
     // simple 4 by 4 input matrix
     double A[4*4] = {10., -1., 2., 0.,
-                           -1., 11., -1., 3.,
-                           2., -1., 10., -1.,
-                           0.0, 3., -1., 8.};
+                     -1., 11., -1., 3.,
+                     2., -1., 10., -1.,
+                     0.0, 3., -1., 8.};
+                     
     double b[4] =  {6., 25., -11., 15.};
     double x[4];
     double expected_x[4] = {1.0,  2.0, -1.0, 1.0};
@@ -146,3 +280,4 @@ TEST(MpiTest, JacobiCrossTest1)
         }
     }
 }
+

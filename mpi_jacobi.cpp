@@ -36,7 +36,7 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
 
     
     int extra = n%q;
-    int vecSize = 0;
+    int my_vecSize = 0, vecSize = 0;
     int index = 0;
     int destination_coords[2] = {0, 0};
     int destination_rank;
@@ -45,11 +45,19 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
     MPI_Cart_rank(comm, destination_coords, &rank0);
     double* newVector;
 
+    if(coordinates[1] < extra){
+        my_vecSize = ceil(n/q);
+    } else{
+        my_vecSize = floor(n/q);
+    }
+
+    double *tmp_vec = (double *) malloc(my_vecSize * sizeof(double));
+
     if(rank == rank0){
         for(int i = 0; i < ceil(n/q); i++){
-            local_vector[i] = &input_vector[i];
+            tmp_vec[i] = input_vector[i];
         }
-        index = ceil(n/q) + 1;
+        index = ceil(n/q);
         for(int i = 1; i < q; i++){
             if(i < extra){
                 vecSize = ceil(n/q);
@@ -61,9 +69,15 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
                 newVector[j-index] = input_vector[j];
             }
             index += vecSize;
+
+            // printf("%d\n", index);
+
             destination_coords[1] = i;
+
+            // printf("%f %f\n", newVector[0], newVector[1]);
+
             MPI_Cart_rank(comm, destination_coords, &destination_rank);
-            MPI_Send(&newVector, vecSize, MPI_DOUBLE, destination_rank, 111, comm );
+            MPI_Send(newVector, vecSize, MPI_DOUBLE, destination_rank, 111, comm );
         }
     } else if(coordinates[0] == 0){
         if(coordinates[1] < extra){
@@ -72,8 +86,20 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
             vecSize = floor(n/q);
         }
         MPI_Status stat;
-        MPI_Recv(local_vector, vecSize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
+
+        // double *tmp = (double *) malloc(vecSize * sizeof(double));
+
+        MPI_Recv(tmp_vec, vecSize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
+
+        // printf("%f %f\n", (*local_vector)[0], (*local_vector)[1]);
     }
+
+    *local_vector = (double *) malloc(my_vecSize * sizeof(double));
+    for (int i = 0; i < my_vecSize; i++) {
+        (*local_vector)[i] = tmp_vec[i];
+    }
+
+    // *local_vector = tmp_vec;
 }
 
 
@@ -99,11 +125,13 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
     int destination_rank;
     double* newVector;
 
+    double *tmp_vec = (double *) malloc(n * sizeof(double));
+
     if(rank == rank0){
         for(int i = 0; i < ceil(n/q); i++){
-            output_vector[i] = local_vector[i];
+            tmp_vec[i] = local_vector[i];
         }
-        index += ceil(n/q) + 1;
+        index += ceil(n/q);
         for(int i = 1; i < q; i++){
             if(i < extra){
                 vecSize = ceil(n/q);
@@ -114,13 +142,15 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
             MPI_Status stat;
             rec_coords[1] = i;
             MPI_Cart_rank(comm, rec_coords, &destination_rank);
-            MPI_Recv(&newVector, vecSize, MPI_DOUBLE, rank0, 111, comm, &stat);
+            MPI_Recv(newVector, vecSize, MPI_DOUBLE, destination_rank, 111, comm, &stat);
             for(int j = index; j < index + vecSize; j++){
-                output_vector[j] = newVector[j-index];
+                tmp_vec[j] = newVector[j-index];
             }
             index += vecSize;
             free(newVector);
         }
+
+        // printf("tmp vec: %f %f %f %f\n", tmp_vec[0], tmp_vec[1], tmp_vec[2], tmp_vec[3]);
 
     } else if(coordinates[0] == 0){
         if(coordinates[1] < extra){
@@ -128,7 +158,11 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
         } else{
             vecSize = floor(n/q);
         }
-        MPI_Send(&local_vector, vecSize, MPI_DOUBLE, rank0, 111, comm );
+        MPI_Send(local_vector, vecSize, MPI_DOUBLE, rank0, 111, comm );
+    }
+
+    for (int i = 0; i < n; i++) {
+        output_vector[i] = tmp_vec[i];
     }
 }
 
@@ -164,11 +198,17 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
     double *loc_mat = (double *) malloc(rowsize * colsize * sizeof(double));
     double *send_mat = NULL;
 
-    int row_offset = rowsize, col_offset = colsize;
+    int row_offset = rowsize, col_offset = 0, index = 0;
     if (coords[0] == 0 && coords[1] == 0) {
 
-        for (i = 0; i < rowsize * colsize; i++) {
-            loc_mat[i] = input_matrix[i];
+        // for (i = 0; i < rowsize * colsize; i++) {
+        //     loc_mat[i] = input_matrix[i];
+        // }
+
+        for (i = 0; i < colsize; i++) {
+            for (int j = 0; j < rowsize; j++) {
+                loc_mat[index++] = input_matrix[i*n + j];
+            }
         }
 
         // Send matrices to the rest of the processors
@@ -192,20 +232,20 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
                     }
                 }
 
-                MPI_Send(&send_mat, send_r * send_c, MPI_DOUBLE, send_rank, 222, comm);
+                MPI_Send(send_mat, send_r * send_c, MPI_DOUBLE, send_rank, 222, comm);
 
                 // Add to index offset for input_matrix
-                col_offset += send_c;
+                row_offset += send_r;
             }
-            row_offset += send_r;
-            col_offset = 0;
+            col_offset += send_c;
+            row_offset = 0;
         }
 
         free(send_mat);
     } else {
         // Receive from 0,0
         MPI_Status stat;
-        MPI_Recv(&loc_mat, rowsize * colsize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(loc_mat, rowsize * colsize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
     }
 
     // Make output pointer point to local matrix
@@ -243,7 +283,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         }
         int dest_coords[2] = {coordinates[1],coordinates[1]};
         MPI_Cart_rank(comm, dest_coords, &destination_rank);
-        MPI_Send(&col_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
+        MPI_Send(col_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
     } else if(coordinates[0] == coordinates[1] && coordinates[0] > 0){
         if(coordinates[1] < extra){
             vecSize = ceil(n/q);
@@ -253,7 +293,13 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         MPI_Status stat;
         int receive_coords[2] = {0, coordinates[1]};
         MPI_Cart_rank(comm, receive_coords, &receive_rank);
-        MPI_Recv(&row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
+    }
+
+    if (coordinates[0] == 0 && coordinates[1] == 0) {
+        for (int i = 0; i < ceil(n / q); i++) {
+            row_vector[i] = col_vector[i];
+        }
     }
 
     if(coordinates[0] == coordinates[1]){
@@ -267,7 +313,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
                 }
                 rec_coords[1] = i;
                 MPI_Cart_rank(comm, rec_coords, &destination_rank);
-                MPI_Send(&row_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
+                MPI_Send(row_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
             }
         }
     } else{
@@ -280,7 +326,7 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
         rec_coords[1] = coordinates[0];
         rec_coords[0] = coordinates[0];
         MPI_Cart_rank(comm, rec_coords, &receive_rank);
-        MPI_Recv(&row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(row_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
     }
 }
 
@@ -293,8 +339,23 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     MPI_Comm_rank(comm, &rank);
     MPI_Cart_coords(comm, rank, 2, coordinates);
     int q = sqrt(p);
-    int extra = n%q;
+    int extra = n % q;
     int vecSize = ceil(n/q);
+
+    // unsigned int t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // // MPI_Barrier(comm);
+    // for(int i = 0; i < 4; i++){
+    //     printf("%f ", local_A[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
+
+    // printf("In matrix-vec mult\n");
+    // unsigned int t = time(0);
+    // while(time(0) < t + rank);
+    // MPI_Barrier(comm);
 
     // if(coordinates[1] < extra){
     //     vecSize = ceil(n/q);
@@ -305,16 +366,26 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     double* new_x = (double*) malloc(vecSize * sizeof(double));
     transpose_bcast_vector(n, local_x, new_x, comm);
 
-    MPI_Barrier(comm);
-    printf("%d\n", vecSize);
-    unsigned int t = time(0);
-    while(time(0) < t + rank);
-    printf("\n%d, %d: ", coordinates[0],coordinates[1]);
-    MPI_Barrier(comm);
-    for(int i = 0; i < floor(n/q); i++){
-        printf("%f ", new_x[i]);
-    }
-    MPI_Barrier(comm);
+    // MPI_Barrier(comm);
+    // printf("%d\n", vecSize);
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // MPI_Barrier(comm);
+    // for(int i = 0; i < floor(n/q); i++){
+    //     printf("%f ", new_x[i]);
+    // }
+    // MPI_Barrier(comm);
+
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // // MPI_Barrier(comm);
+    // for(int i = 0; i < ceil(n / q); i++){
+    //     printf("%f ", new_x[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
 
     int rowsize, colsize;
     int fl = floor(n / q);
@@ -329,18 +400,38 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     } else {
         colsize = fl;
     }
+
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: %d %d\n", coordinates[0],coordinates[1], rowsize, colsize);
+    // MPI_Barrier(comm);
+
     //sum local values
+    for (int i = 0; i < colsize; i++) {
+        local_y[i] = 0;
+    }
+
     for(int i = 0; i < colsize; i++){
         for(int j = 0; j < rowsize; j++){
             local_y[i] += local_A[i*colsize + j] * new_x[j];
         }
     }
-    t = time(0);
-    while(time(0) < t +1);
-    printf("\nhi\n");
-    t = time(0);
-    while(time(0) < t +1);
-    MPI_Barrier(comm);
+    // t = time(0);
+    // while(time(0) < t +1);
+    // printf("\nhi\n");
+    // t = time(0);
+    // while(time(0) < t +1);
+    // MPI_Barrier(comm);
+
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // // MPI_Barrier(comm);
+    // for(int i = 0; i < floor(n/q); i++){
+    //     printf("%f ", local_y[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
 
     //reduction
     if(coordinates[1] < extra){
@@ -348,26 +439,38 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     } else{
         vecSize = floor(n/q);
     }
-    double* temp_vector;
-    int rec_coords[2] = {0,0};
+    double* temp_vector = (double*) malloc(vecSize * sizeof(double));
+    int rec_coords[2] = {0, coordinates[1]};
     int receive_rank, send_rank;
     if(coordinates[0] == 0){
         for(int i = 1; i < q; i++){
-            rec_coords[1] = i;
+            rec_coords[0] = i;
             MPI_Cart_rank(comm, rec_coords, &receive_rank);
             MPI_Status stat;
-            temp_vector = (double*) malloc(vecSize * sizeof(double));
-            MPI_Recv(&temp_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
+            MPI_Recv(temp_vector, vecSize, MPI_DOUBLE, receive_rank, MPI_ANY_TAG, comm, &stat);
             for(int j = 0; j < vecSize; j++){
                 local_y[j] += temp_vector[j];
             }
-            free(temp_vector);
         }
     } else{
         int send_coords[2] = {0, coordinates[1]};
         MPI_Cart_rank(comm, send_coords, &send_rank);
-        MPI_Send(&local_y, vecSize, MPI_DOUBLE, send_rank, 111, comm);
+        MPI_Send(local_y, vecSize, MPI_DOUBLE, send_rank, 111, comm);
     }
+    free(temp_vector);
+
+    // if (coordinates[0] == 0) {
+    //     t = time(0);
+    //     while(time(0) < t + rank);
+    //     printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    //     // MPI_Barrier(comm);
+    //     for(int i = 0; i < floor(n/q); i++){
+    //         printf("%f ", local_y[i]);
+    //     }
+    //     printf("\n");
+    // }
+    // MPI_Barrier(comm);
+
 }
 
 // Solves Ax = b using the iterative jacobi method
@@ -392,6 +495,22 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     double *all_squared = NULL;
     double *diag = NULL;
 
+    unsigned int t;
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // // MPI_Barrier(comm);
+    // for(int i = 0; i < floor(n/q); i++){
+    //     printf("%f ", local_y[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
+
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("1\n");
+    // MPI_Barrier(comm);
+
     // Find the local matrix dimensions
     if (coords[0] < extra) {
         rowsize = ceil(n / q);
@@ -412,6 +531,11 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         }
     }
 
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("2\n");
+    // MPI_Barrier(comm);
+
     // Find the diagonal and send it to the first column
     if (coords[0] == coords[1]) {
         diag = (double *) malloc(rowsize * sizeof(double));
@@ -419,26 +543,38 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             diag[i] = local_A[i * rowsize + i];
         }
 
-        int send_coords[2] = {coords[1], 0};
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("11\n");
+
+        int send_coords[2] = {0, coords[1]};
         int send_rank;
         MPI_Cart_rank(comm, send_coords, &send_rank);
-        if (coords[0] != 0) {
-            MPI_Send(&diag, rowsize, MPI_DOUBLE, send_rank, 333, comm);
+        if (coords[1] != 0) {
+            MPI_Send(diag, rowsize, MPI_DOUBLE, send_rank, 333, comm);
             free(diag);
         } else {
             // Make vectors on 0,0
-            x = (double *) malloc(colsize * sizeof(double));
+            x = (double *) calloc(colsize, sizeof(double));
             w = (double *) malloc(colsize * sizeof(double));
             squared = (double *) malloc(colsize * sizeof(double));
             all_squared = (double *) malloc(n * sizeof(double));
+
+            // for (int i = 0; i < colsize; i++) {
+            //     x[i] = 0;
+            // }
         }
+
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("12\n");
 
         // set diagonal of R to zero
         for (int i = 0; i < rowsize; i++) {
             local_R[i * rowsize + i] = 0;
         }
 
-    } else if (coords[0] == 0) {
+    } else if (coords[0] == 0 && coords[1] > 0) {
         int rec_size = colsize;
 
         int rec_coords[2] = {coords[1], coords[1]};
@@ -447,23 +583,49 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
 
         diag = (double *) malloc(rec_size * sizeof(double));
         MPI_Status stat;
-        MPI_Recv(&diag, rec_size, MPI_DOUBLE, rec_rank, MPI_ANY_TAG, comm, &stat);
+        MPI_Recv(diag, rec_size, MPI_DOUBLE, rec_rank, MPI_ANY_TAG, comm, &stat);
 
         // Make vectors
-        x = (double *) malloc(colsize * sizeof(double));
+        x = (double *) calloc(colsize, sizeof(double));
         w = (double *) malloc(colsize * sizeof(double));
         squared = (double *) malloc(colsize * sizeof(double));
     }
 
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("3\n");
+    // MPI_Barrier(comm);
+
+    // Computation loop for Jacobi's method
     int cont = 1;
     for (int iter = 0; iter < max_iter; iter++) {
+
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("Rank %d %d: ", coords[0], coords[1]);
+        // for (int i = 0; i <  colsize; i++) {
+        //     printf("%f ", x[i]);
+        // }
+        // printf("\n");
+        // MPI_Barrier(comm);
+
         distributed_matrix_vector_mult(n, local_R, x, w, comm);
+
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("20\n");
+        MPI_Barrier(comm);
 
         if (coords[0] == 0) {
             for (int i = 0; i < colsize; i++) {
                 x[i] = (local_b[i] - w[i]) / diag[i];
             }
         }
+
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("21\n");
+        MPI_Barrier(comm);
 
         distributed_matrix_vector_mult(n, local_A, x, w, comm);
 
@@ -487,9 +649,19 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("22\n");
+        MPI_Barrier(comm);
+
         MPI_Bcast(&cont, 1, MPI_INT, rank0, comm);
         if (!cont) break;
     }
+
+    t = time(0);
+    while(time(0) < t + rank);
+    printf("4\n");
+    MPI_Barrier(comm);
 
     for (int i = 0; i < colsize; i++) {
         local_x[i] = x[i];
