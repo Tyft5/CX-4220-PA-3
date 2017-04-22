@@ -295,8 +295,6 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     int q = sqrt(p);
     int extra = n%q;
     int vecSize = ceil(n/q);
-    int index = 0;
-
 
     // if(coordinates[1] < extra){
     //     vecSize = ceil(n/q);
@@ -307,7 +305,18 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     double* new_x = (double*) malloc(vecSize * sizeof(double));
     transpose_bcast_vector(n, local_x, new_x, comm);
 
-    int rowsize = 0, colsize;
+    MPI_Barrier(comm);
+    printf("%d\n", vecSize);
+    unsigned int t = time(0);
+    while(time(0) < t + rank);
+    printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    MPI_Barrier(comm);
+    for(int i = 0; i < floor(n/q); i++){
+        printf("%f ", new_x[i]);
+    }
+    MPI_Barrier(comm);
+
+    int rowsize, colsize;
     int fl = floor(n / q);
     int cl = ceil(n / q);
     if (coordinates[0] < extra) {
@@ -322,17 +331,11 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     }
     //sum local values
     for(int i = 0; i < colsize; i++){
-        // if(i < extra){
-        //     vecSize = ceil(n/q);
-        // } else{
-        //     vecSize = floor(n/q);
-        // }
         for(int j = 0; j < rowsize; j++){
-            local_y[i] += local_A[index + j] * new_x[j];
+            local_y[i] += local_A[i*colsize + j] * new_x[j];
         }
-        index += colsize;
     }
-    unsigned int t = time(0);
+    t = time(0);
     while(time(0) < t +1);
     printf("\nhi\n");
     t = time(0);
