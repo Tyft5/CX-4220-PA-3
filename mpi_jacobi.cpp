@@ -140,7 +140,8 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
     MPI_Cart_coords(comm, rank, 2, coords);
 
     int rank0;
-    MPI_Cart_rank(comm, {0, 0}, &rank0);
+    int zero_coords[2] = {0, 0};
+    MPI_Cart_rank(comm, zero_coords, &rank0);
 
     // Find size of local matrix
     int fl = floor(n / q);
@@ -156,11 +157,12 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
         colsize = fl;
     }
 
-    double *tmp_mat[rowsize];
-    for (i = 0; i < rowsize; i++) {
-        tmp_mat[i] = (double *) malloc(colsize * sizeof(double));
-    }
+    double *loc_mat = (double *) malloc(rowsize * colsize * sizeof(double));
 
+    // double *tmp_mat[rowsize];
+    // for (i = 0; i < rowsize; i++) {
+    //     tmp_mat[i] = (double *) malloc(colsize * sizeof(double));
+    // }
     // double **tmp_mat = (double **) malloc(rowsize * sizeof(double *));
     // tmp_mat[0] = (double *) malloc(rowsize * colsize * sizeof(double));
     // for (int i = 0; i < rowsize; i++) {
@@ -171,17 +173,21 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
     if (coords[0] == 0 && coords[1] == 0) {
 
         // Copy local matrix for 0,0
-        for (i = 0; i < rowsize; i++) {
-            for (int j = 0; j < colsize; j++) {
-                tmp_mat[i][j] = input_matrix[i][j]
-            }
+        // for (i = 0; i < rowsize; i++) {
+        //     for (int j = 0; j < colsize; j++) {
+        //         tmp_mat[i][j] = input_matrix[i][j]
+        //     }
+        // }
+        for (i = 0; i < rowsize * colsize; i++) {
+            loc_mat[i] = input_matrix[i];
         }
 
         // Send matrices to the rest of the processors
         for (int v = 0; v < q; v++) {
             for (int w = 0; w < q; w++) {
                 if (v == 0 && w == 0) continue;
-                MPI_Cart_rank(comm, {v, w}, &send_rank);
+                int send_coords[2] = {v, w};
+                MPI_Cart_rank(comm, send_coords, &send_rank);
 
                 // Find size of send matrix
                 if (v < extra) { send_r = cl; }
@@ -190,34 +196,31 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
                 else { send_c = fl; } 
 
                 // Allocate send matrix
-                double *send_mat[send_r];
+                double *send_mat = (double *) malloc(send_r * send_c * sizeof(double));
                 for (i = 0; i < send_r; i++) {
-                    send_mat[i] = (double *) malloc(send_c * sizeof(double));
                     for (int j = 0; j < send_c; j++) {
-                        send_mat[i][j] = input_matrix[][];
+                        send_mat[i * send_c + j] = input_matrix[row_offset * n + col_offset + i * n + j];
                     }
                 }
 
-                for (i = 0; i < rowsize; i++) {
-                    MPI_Send(&send_mat[i][0], send_c, MPI_DOUBLE, send_rank, 222, comm);
-                }
+                MPI_Send(&send_mat, send_r * send_c, MPI_DOUBLE, send_rank, 222, comm);
 
-                // Add to index offsets for input_matrix
-                col_offset += send_c
+                // Add to index offset for input_matrix
+                col_offset += send_c;
             }
             row_offset += send_r;
             col_offset = 0;
         }
+
+        // free send_mat
     } else {
         // Receive from 0,0
         MPI_Status stat;
-        for (i = 0; i < rowsize; i++) {
-            MPI_Recv(&tmp_mat[i][0], colsize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
-        }
+        MPI_Recv(&loc_mat, rowsize * colsize, MPI_DOUBLE, rank0, MPI_ANY_TAG, comm, &stat);
     }
 
     // Make output pointer point to local matrix
-    *local_matrix = tmp_mat;
+    *local_matrix = loc_mat;
 }
 
 
@@ -301,7 +304,23 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
 void distributed_jacobi(const int n, double* local_A, double* local_b, double* local_x,
                 MPI_Comm comm, int max_iter, double l2_termination)
 {
-    // TODO
+    /*
+     *      D = diag(A)     // block distribute to first column (i,0)
+     *      R = A - D       // copy A and set diagonal to zero
+     *      x = [0,...,0]   // init x to zero, block distributed on first column
+     *
+     *      for (iter in 1:max_iter):
+     *          w = R*x         // using distributed_matrix_vector_mult()
+     *          x = (b - P)/D   // purely local on first column, no communication necessary!
+     *          w = A*x         // using distributed_matrix_vector_mult()
+     *          l2 = ||b - w||  // calculate L2-norm in a distributed fashion
+     *          if l2 <= l2_termination:
+     *              return      // exit if termination criteria is met, make sure
+     *                          // all processor know that they should exit
+     *                          // (-> MPI_Allreduce)
+     */
+
+
 }
 
 
