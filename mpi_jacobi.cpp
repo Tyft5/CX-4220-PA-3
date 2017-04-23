@@ -125,11 +125,11 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
     int destination_rank;
     double* newVector;
 
-    double *tmp_vec = (double *) malloc(n * sizeof(double));
+    // double *tmp_vec = (double *) malloc(n * sizeof(double));
 
     if(rank == rank0){
         for(int i = 0; i < ceil(((double)n)/q); i++){
-            tmp_vec[i] = local_vector[i];
+            output_vector[i] = local_vector[i];
         }
         index += ceil(((double)n)/q);
         for(int i = 1; i < q; i++){
@@ -144,7 +144,7 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
             MPI_Cart_rank(comm, rec_coords, &destination_rank);
             MPI_Recv(newVector, vecSize, MPI_DOUBLE, destination_rank, 111, comm, &stat);
             for(int j = index; j < index + vecSize; j++){
-                tmp_vec[j] = newVector[j-index];
+                output_vector[j] = newVector[j-index];
             }
             index += vecSize;
             free(newVector);
@@ -161,9 +161,11 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
         MPI_Send(local_vector, vecSize, MPI_DOUBLE, rank0, 111, comm );
     }
 
-    for (int i = 0; i < n; i++) {
-        output_vector[i] = tmp_vec[i];
-    }
+    // for (int i = 0; i < n; i++) {
+    //     output_vector[i] = tmp_vec[i];
+    // }
+
+    // free(temp_vec);
 }
 
 void distribute_matrix(const int n, double* input_matrix, double** local_matrix, MPI_Comm comm)
