@@ -15,6 +15,7 @@
 #include <iostream>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // Calculates y = A*x for a square n-by-n matrix A, and n-dimensional vectors x
 // and y
@@ -77,6 +78,7 @@ void jacobi(const int n, double* A, double* b, double* x, int max_iter, double l
         if (l2 <= l2_termination) break;
 
         iter++;
+        sum = 0;
     }
 
     free(R);

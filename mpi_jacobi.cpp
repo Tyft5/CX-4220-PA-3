@@ -46,23 +46,23 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
     double* newVector;
 
     if(coordinates[1] < extra){
-        my_vecSize = ceil(n/q);
+        my_vecSize = ceil(((double)n)/q);
     } else{
-        my_vecSize = floor(n/q);
+        my_vecSize = floor(((double)n)/q);
     }
 
     double *tmp_vec = (double *) malloc(my_vecSize * sizeof(double));
 
     if(rank == rank0){
-        for(int i = 0; i < ceil(n/q); i++){
+        for(int i = 0; i < ceil(((double)n)/q); i++){
             tmp_vec[i] = input_vector[i];
         }
-        index = ceil(n/q);
+        index = ceil(((double)n)/q);
         for(int i = 1; i < q; i++){
             if(i < extra){
-                vecSize = ceil(n/q);
+                vecSize = ceil(((double)n)/q);
             } else{
-                vecSize = floor(n/q);
+                vecSize = floor(((double)n)/q);
             }
             newVector = (double*) malloc(vecSize * sizeof(double));
             for(int j = index; j < index + vecSize; j++){
@@ -81,9 +81,9 @@ void distribute_vector(const int n, double* input_vector, double** local_vector,
         }
     } else if(coordinates[0] == 0){
         if(coordinates[1] < extra){
-            vecSize = ceil(n/q);
+            vecSize = ceil(((double)n)/q);
         } else{
-            vecSize = floor(n/q);
+            vecSize = floor(((double)n)/q);
         }
         MPI_Status stat;
 
@@ -128,15 +128,15 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
     double *tmp_vec = (double *) malloc(n * sizeof(double));
 
     if(rank == rank0){
-        for(int i = 0; i < ceil(n/q); i++){
+        for(int i = 0; i < ceil(((double)n)/q); i++){
             tmp_vec[i] = local_vector[i];
         }
-        index += ceil(n/q);
+        index += ceil(((double)n)/q);
         for(int i = 1; i < q; i++){
             if(i < extra){
-                vecSize = ceil(n/q);
+                vecSize = ceil(((double)n)/q);
             } else{
-                vecSize = floor(n/q);
+                vecSize = floor(((double)n)/q);
             }
             newVector = (double *) malloc(vecSize * sizeof(double));
             MPI_Status stat;
@@ -154,9 +154,9 @@ void gather_vector(const int n, double* local_vector, double* output_vector, MPI
 
     } else if(coordinates[0] == 0){
         if(coordinates[1] < extra){
-            vecSize = ceil(n/q);
+            vecSize = ceil(((double)n)/q);
         } else{
-            vecSize = floor(n/q);
+            vecSize = floor(((double)n)/q);
         }
         MPI_Send(local_vector, vecSize, MPI_DOUBLE, rank0, 111, comm );
     }
@@ -182,8 +182,8 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
     MPI_Cart_rank(comm, zero_coords, &rank0);
 
     // Find size of local matrix
-    int fl = floor(n / q);
-    int cl = ceil(n / q);
+    int fl = floor(((double)n) / q);
+    int cl = ceil(((double)n) / q);
     if (coords[0] < extra) {
         rowsize = cl;
     } else {
@@ -235,9 +235,9 @@ void distribute_matrix(const int n, double* input_matrix, double** local_matrix,
                 MPI_Send(send_mat, send_r * send_c, MPI_DOUBLE, send_rank, 222, comm);
 
                 // Add to index offset for input_matrix
-                row_offset += send_r;
+                row_offset += send_c;
             }
-            col_offset += send_c;
+            col_offset += send_r;
             row_offset = 0;
         }
 
@@ -277,18 +277,18 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     //send/recieve to pivot
     if(coordinates[0] == 0 && rank != rank0){
         if(coordinates[1] < extra){
-            vecSize = ceil(n/q);
+            vecSize = ceil(((double)n)/q);
         } else{
-            vecSize = floor(n/q);
+            vecSize = floor(((double)n)/q);
         }
         int dest_coords[2] = {coordinates[1],coordinates[1]};
         MPI_Cart_rank(comm, dest_coords, &destination_rank);
         MPI_Send(col_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
     } else if(coordinates[0] == coordinates[1] && coordinates[0] > 0){
         if(coordinates[1] < extra){
-            vecSize = ceil(n/q);
+            vecSize = ceil(((double)n)/q);
         } else{
-            vecSize = floor(n/q);
+            vecSize = floor(((double)n)/q);
         }
         MPI_Status stat;
         int receive_coords[2] = {0, coordinates[1]};
@@ -297,30 +297,35 @@ void transpose_bcast_vector(const int n, double* col_vector, double* row_vector,
     }
 
     if (coordinates[0] == 0 && coordinates[1] == 0) {
-        for (int i = 0; i < ceil(n / q); i++) {
+        for (int i = 0; i < ceil(((double)n) / q); i++) {
             row_vector[i] = col_vector[i];
         }
     }
 
     if(coordinates[0] == coordinates[1]){
         rec_coords[0] = coordinates[0];
+        if(coordinates[1] < extra){
+            vecSize = ceil(((double)n)/q);
+        } else{
+            vecSize = floor(((double)n)/q);
+        }
         for(int i = 0; i < q; i++){
             if(i != coordinates[1]){
-                if(i < extra){
-                    vecSize = ceil(n/q);
-                } else{
-                    vecSize = floor(n/q);
-                }
+                // if(i < extra){
+                //     vecSize = ceil(((double)n)/q);
+                // } else{
+                //     vecSize = floor(((double)n)/q);
+                // }
                 rec_coords[1] = i;
                 MPI_Cart_rank(comm, rec_coords, &destination_rank);
                 MPI_Send(row_vector, vecSize, MPI_DOUBLE, destination_rank, 111, comm);
             }
         }
     } else{
-        if(coordinates[1] < extra){
-            vecSize = ceil(n/q);
+        if(coordinates[0] < extra){
+            vecSize = ceil(((double)n)/q);
         } else{
-            vecSize = floor(n/q);
+            vecSize = floor(((double)n)/q);
         }
         MPI_Status stat;
         rec_coords[1] = coordinates[0];
@@ -342,15 +347,7 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     int extra = n % q;
     int vecSize = ceil(n/q);
 
-    // unsigned int t = time(0);
-    // while(time(0) < t + rank);
-    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
-    // // MPI_Barrier(comm);
-    // for(int i = 0; i < 4; i++){
-    //     printf("%f ", local_A[i]);
-    // }
-    // printf("\n");
-    // MPI_Barrier(comm);
+    unsigned int t;
 
     // printf("In matrix-vec mult\n");
     // unsigned int t = time(0);
@@ -388,8 +385,8 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     // MPI_Barrier(comm);
 
     int rowsize, colsize;
-    int fl = floor(n / q);
-    int cl = ceil(n / q);
+    int fl = floor(((double)n) / q);
+    int cl = ceil(((double)n) / q);
     if (coordinates[0] < extra) {
         rowsize = cl;
     } else {
@@ -403,6 +400,16 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
 
     // t = time(0);
     // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // // MPI_Barrier(comm);
+    // for(int i = 0; i < rowsize * colsize; i++){
+    //     printf("%f ", local_A[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
+
+    // t = time(0);
+    // while(time(0) < t + rank);
     // printf("\n%d, %d: %d %d\n", coordinates[0],coordinates[1], rowsize, colsize);
     // MPI_Barrier(comm);
 
@@ -413,31 +420,37 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
 
     for(int i = 0; i < colsize; i++){
         for(int j = 0; j < rowsize; j++){
-            local_y[i] += local_A[i*colsize + j] * new_x[j];
+            local_y[i] += local_A[i*rowsize + j] * new_x[j];
         }
     }
     // t = time(0);
     // while(time(0) < t +1);
     // printf("\nhi\n");
-    // t = time(0);
-    // while(time(0) < t +1);
     // MPI_Barrier(comm);
 
     // t = time(0);
     // while(time(0) < t + rank);
     // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
-    // // MPI_Barrier(comm);
-    // for(int i = 0; i < floor(n/q); i++){
+    // for(int i = 0; i < colsize; i++){
     //     printf("%f ", local_y[i]);
+    // }
+    // printf("\n");
+    // MPI_Barrier(comm);
+
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
+    // for(int i = 0; i < rowsize; i++){
+    //     printf("%f ", new_x[i]);
     // }
     // printf("\n");
     // MPI_Barrier(comm);
 
     //reduction
     if(coordinates[1] < extra){
-        vecSize = ceil(n/q);
+        vecSize = ceil(((double)n)/q);
     } else{
-        vecSize = floor(n/q);
+        vecSize = floor(((double)n)/q);
     }
     double* temp_vector = (double*) malloc(vecSize * sizeof(double));
     int rec_coords[2] = {0, coordinates[1]};
@@ -499,7 +512,7 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     double *all_squared = (double *) malloc(n * sizeof(double));
     double *diag = NULL;
 
-    // unsigned int t;
+    unsigned int t;
     // t = time(0);
     // while(time(0) < t + rank);
     // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
@@ -517,14 +530,14 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
 
     // Find the local matrix dimensions
     if (coords[0] < extra) {
-        rowsize = ceil(n / q);
+        rowsize = ceil(((double)n) / q);
     } else {
-        rowsize = floor(n / q);
+        rowsize = floor(((double)n) / q);
     }
     if (coords[1] < extra) {
-        colsize = ceil(n / q);
+        colsize = ceil(((double)n) / q);
     } else {
-        colsize = floor(n / q);
+        colsize = floor(((double)n) / q);
     }
 
     // Copy A into R
@@ -617,10 +630,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
 
         distributed_matrix_vector_mult(n, local_R, x, w, comm);
 
-        // t = time(0);
-        // while(time(0) < t + rank);
-        // printf("20\n");
-        // MPI_Barrier(comm);
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("20\n");
+        MPI_Barrier(comm);
 
         if (coords[0] == 0) {
             for (int i = 0; i < colsize; i++) {
@@ -628,10 +641,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        // t = time(0);
-        // while(time(0) < t + rank);
-        // printf("21\n");
-        // MPI_Barrier(comm);
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("21\n");
+        MPI_Barrier(comm);
 
         distributed_matrix_vector_mult(n, local_A, x, w, comm);
 
@@ -655,19 +668,19 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        // t = time(0);
-        // while(time(0) < t + rank);
-        // printf("22\n");
-        // MPI_Barrier(comm);
+        t = time(0);
+        while(time(0) < t + rank);
+        printf("22\n");
+        MPI_Barrier(comm);
 
         MPI_Bcast(&cont, 1, MPI_INT, rank0, comm);
         if (!cont) break;
     }
 
-    // t = time(0);
-    // while(time(0) < t + rank);
-    // printf("4\n");
-    // MPI_Barrier(comm);
+    t = time(0);
+    while(time(0) < t + rank);
+    printf("4\n");
+    MPI_Barrier(comm);
 
     for (int i = 0; i < colsize; i++) {
         local_x[i] = x[i];
@@ -679,6 +692,11 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     free(x);
     free(squared);
     free(all_squared);
+
+    t = time(0);
+    while(time(0) < t + rank);
+    printf("5\n");
+    MPI_Barrier(comm);
 }
 
 
@@ -708,6 +726,14 @@ void mpi_jacobi(const int n, double* A, double* b, double* x, MPI_Comm comm,
     double* local_b = NULL;
     distribute_matrix(n, &A[0], &local_A, comm);
     distribute_vector(n, &b[0], &local_b, comm);
+
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    // unsigned int t = time(0);
+    // while(time(0) < t + rank);
+    // printf("Here\n");
+    // MPI_Barrier(comm);
 
     // allocate local result space
     double* local_x = new double[block_decompose_by_dim(n, comm, 0)];
