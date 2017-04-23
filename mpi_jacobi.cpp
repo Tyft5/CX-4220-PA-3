@@ -347,7 +347,7 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
     int extra = n % q;
     int vecSize = ceil(n/q);
 
-    unsigned int t;
+    // unsigned int t;
 
     // printf("In matrix-vec mult\n");
     // unsigned int t = time(0);
@@ -490,6 +490,8 @@ void distributed_matrix_vector_mult(const int n, double* local_A, double* local_
 void distributed_jacobi(const int n, double* local_A, double* local_b, double* local_x,
                 MPI_Comm comm, int max_iter, double l2_termination)
 {
+    // unsigned int t;
+
     int p, rank, rowsize = 0, colsize = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     int coords[2];
@@ -502,8 +504,25 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     int rank0;
     MPI_Cart_rank(comm, zero_coords, &rank0);
 
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("0\n");
+    // MPI_Barrier(comm);
+
+    // Find the local matrix dimensions
+    if (coords[0] < extra) {
+        rowsize = ceil(((double)n) / q);
+    } else {
+        rowsize = floor(((double)n) / q);
+    }
+    if (coords[1] < extra) {
+        colsize = ceil(((double)n) / q);
+    } else {
+        colsize = floor(((double)n) / q);
+    }
+
     // double *x = NULL;
-    double *x = (double *) calloc(colsize, sizeof(double));
+    double *x = (double *) malloc(rowsize * sizeof(double));
     // double *w = NULL;
     double *w = (double *) malloc(colsize * sizeof(double));
     // double *squared = NULL;
@@ -512,7 +531,6 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     double *all_squared = (double *) malloc(n * sizeof(double));
     double *diag = NULL;
 
-    unsigned int t;
     // t = time(0);
     // while(time(0) < t + rank);
     // printf("\n%d, %d: ", coordinates[0],coordinates[1]);
@@ -527,18 +545,6 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     // while(time(0) < t + rank);
     // printf("1\n");
     // MPI_Barrier(comm);
-
-    // Find the local matrix dimensions
-    if (coords[0] < extra) {
-        rowsize = ceil(((double)n) / q);
-    } else {
-        rowsize = floor(((double)n) / q);
-    }
-    if (coords[1] < extra) {
-        colsize = ceil(((double)n) / q);
-    } else {
-        colsize = floor(((double)n) / q);
-    }
 
     // Copy A into R
     double *local_R = (double *) malloc(rowsize * colsize * sizeof(double));
@@ -569,7 +575,7 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         MPI_Cart_rank(comm, send_coords, &send_rank);
         if (coords[1] != 0) {
             MPI_Send(diag, rowsize, MPI_DOUBLE, send_rank, 333, comm);
-            free(diag);
+            // free(diag);
         } else {
             // Make vectors on 0,0
             // x = (double *) calloc(colsize, sizeof(double));
@@ -615,6 +621,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     // printf("3\n");
     // MPI_Barrier(comm);
 
+    for (int i = 0; i < rowsize; i++) {
+        x[i] = 0.0;
+    }
+
     // Computation loop for Jacobi's method
     int cont = 1;
     for (int iter = 0; iter < max_iter; iter++) {
@@ -622,18 +632,20 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
         // t = time(0);
         // while(time(0) < t + rank);
         // printf("Rank %d %d: ", coords[0], coords[1]);
-        // for (int i = 0; i <  colsize; i++) {
+        // for (int i = 0; i <  rowsize; i++) {
         //     printf("%f ", x[i]);
         // }
         // printf("\n");
+        // t = time(0);
+        // while(time(0) < t + 1);
         // MPI_Barrier(comm);
 
         distributed_matrix_vector_mult(n, local_R, x, w, comm);
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("20\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("20\n");
+        // MPI_Barrier(comm);
 
         if (coords[0] == 0) {
             for (int i = 0; i < colsize; i++) {
@@ -641,10 +653,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("21\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("21\n");
+        // MPI_Barrier(comm);
 
         distributed_matrix_vector_mult(n, local_A, x, w, comm);
 
@@ -668,19 +680,19 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
             }
         }
 
-        t = time(0);
-        while(time(0) < t + rank);
-        printf("22\n");
-        MPI_Barrier(comm);
+        // t = time(0);
+        // while(time(0) < t + rank);
+        // printf("22\n");
+        // MPI_Barrier(comm);
 
         MPI_Bcast(&cont, 1, MPI_INT, rank0, comm);
         if (!cont) break;
     }
 
-    t = time(0);
-    while(time(0) < t + rank);
-    printf("4\n");
-    MPI_Barrier(comm);
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("4\n");
+    // MPI_Barrier(comm);
 
     for (int i = 0; i < colsize; i++) {
         local_x[i] = x[i];
@@ -693,10 +705,10 @@ void distributed_jacobi(const int n, double* local_A, double* local_b, double* l
     free(squared);
     free(all_squared);
 
-    t = time(0);
-    while(time(0) < t + rank);
-    printf("5\n");
-    MPI_Barrier(comm);
+    // t = time(0);
+    // while(time(0) < t + rank);
+    // printf("5\n");
+    // MPI_Barrier(comm);
 }
 
 
