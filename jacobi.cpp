@@ -17,16 +17,28 @@
 
 // Calculates y = A*x for a square n-by-n matrix A, and n-dimensional vectors x
 // and y
-void matrix_vector_mult(const int n, const double* A, const double* x, double* y)
-{
-    // TODO
+void matrix_vector_mult(const int n, const double* A, const double* x, double* y){
+    double summ = 0;
+    for(int i = 0; i < n; i++){
+    	for(int j = 0; j < n; j++){
+    		summ += A[i*n + j] * x[j];
+    	}
+    	y[i] = summ;
+    	summ = 0;
+    }
 }
 
 // Calculates y = A*x for a n-by-m matrix A, a m-dimensional vector x
 // and a n-dimensional vector y
-void matrix_vector_mult(const int n, const int m, const double* A, const double* x, double* y)
-{
-    // TODO
+void matrix_vector_mult(const int n, const int m, const double* A, const double* x, double* y){
+    double summ = 0;
+    for(int i = 0; i < n; i++){
+    	for(int j = 0; j < m; j++){
+    		summ += A[i*m + j] * x[j];
+    	}
+    	y[i] = summ;
+    	summ = 0;
+    }
 }
 
 // implements the sequential jacobi method
