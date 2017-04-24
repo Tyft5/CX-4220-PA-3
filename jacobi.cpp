@@ -21,6 +21,7 @@
 // and y
 void matrix_vector_mult(const int n, const double* A, const double* x, double* y){
     double summ = 0;
+    //for each row and column get the sum of A*x
     for(int i = 0; i < n; i++){
     	for(int j = 0; j < n; j++){
     		summ += A[i*n + j] * x[j];
@@ -34,6 +35,7 @@ void matrix_vector_mult(const int n, const double* A, const double* x, double* y
 // and a n-dimensional vector y
 void matrix_vector_mult(const int n, const int m, const double* A, const double* x, double* y){
     double summ = 0;
+    //for each row and column get the sum of A*x
     for(int i = 0; i < n; i++){
     	for(int j = 0; j < m; j++){
     		summ += A[i*m + j] * x[j];
@@ -68,7 +70,6 @@ void jacobi(const int n, double* A, double* b, double* x, int max_iter, double l
         for (int i = 0; i < n; i++) {
             x[i] = (b[i] - w[i]) / diag[i];
         }
-
         // Check for convergence
         matrix_vector_mult(n, A, x, w);
         for (int i = 0; i < n; i++) {
@@ -76,11 +77,11 @@ void jacobi(const int n, double* A, double* b, double* x, int max_iter, double l
         }
         l2 = sqrt(sum);
         if (l2 <= l2_termination) break;
-
         iter++;
         sum = 0;
     }
 
+    //free the variables
     free(R);
     free(diag);
     free(w);
