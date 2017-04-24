@@ -545,14 +545,6 @@ void mpi_jacobi(const int n, double* A, double* b, double* x, MPI_Comm comm,
     distribute_matrix(n, &A[0], &local_A, comm);
     distribute_vector(n, &b[0], &local_b, comm);
 
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    // unsigned int t = time(0);
-    // while(time(0) < t + rank);
-    // printf("Here\n");
-    // MPI_Barrier(comm);
-
     // allocate local result space
     double* local_x = new double[block_decompose_by_dim(n, comm, 0)];
     distributed_jacobi(n, local_A, local_b, local_x, comm, max_iter, l2_termination);
